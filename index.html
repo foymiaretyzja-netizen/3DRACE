@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Car Drive</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // --- Scene Setup ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7.5);
+    scene.add(light, new THREE.AmbientLight(0x404040));
+
+    // --- Environment ---
+    const grid = new THREE.GridHelper(200, 50, 0xffffff, 0x444444);
+    scene.add(grid);
+
+    // --- Car Physics Variables ---
+    let car;
+    const stats = { speed: 0, acceleration: 0.005, friction: 0.98, maxSpeed: 0.5, steering: 0.04 };
+    const keys = { w: false, s: false, a: false, d: false };
+    const particles = [];
+
+    // --- Load Model ---
+    const loader = new GLTFLoader();
+    loader.load('./RaceCar.glb', (gltf) => {
+        car = gltf.scene;
+        scene.add(car);
+    }, undefined, (error) => console.error('Error loading model:', error));
+
+    // --- Smoke System ---
+    function createSmoke() {
+        if (!car || Math.abs(stats.speed) < 0.05) return;
+        
+        const geo = new THREE.SphereGeometry(0.1, 4, 4);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.5 });
+        const p = new THREE.Mesh(geo, mat);
+        
+        // Position smoke at the back of the car
+        p.position.copy(car.position);
+        particles.push({ mesh: p, life: 1.0 });
+        scene.add(p);
+    }
+
+    // --- Input Handling ---
+    window.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+
+    // --- Main Loop ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (car) {
+            // Physics Logic
+            if (keys.w) stats.speed += stats.acceleration;
+            if (keys.s) stats.speed -= stats.acceleration;
+            
+            stats.speed *= stats.friction; // Apply air resistance/friction
+            
+            if (keys.a) car.rotation.y += stats.steering * (stats.speed * 2);
+            if (keys.d) car.rotation.y -= stats.steering * (stats.speed * 2);
+
+            car.translateX(stats.speed);
+
+            // Follow Camera
+            const relativeCameraOffset = new THREE.Vector3(-5, 2, 0);
+            const cameraOffset = relativeCameraOffset.applyMatrix4(car.matrixWorld);
+            camera.position.lerp(cameraOffset, 0.1);
+            camera.lookAt(car.position);
+
+            // Handle Smoke
+            if (keys.w) createSmoke();
+            particles.forEach((p, index) => {
+                p.life -= 0.02;
+                p.mesh.scale.multiplyScalar(1.05);
+                p.mesh.material.opacity = p.life;
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(index, 1);
+                }
+            });
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
