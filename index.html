@@ -3,22 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Axe & Crates FPS</title>
+    <title>Jeep Compass Viewer</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #87CEEB; }
-        #ui-health { position: absolute; bottom: 20px; left: 20px; width: 200px; height: 20px; background: #333; border: 2px solid #fff; }
-        #health-bar { width: 100%; height: 100%; background: #ff3333; transition: width 0.3s; }
-        #ui-coins { position: absolute; top: 20px; right: 20px; color: gold; font-size: 24px; font-weight: bold; text-shadow: 2px 2px #000; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; border: 1px solid black;}
-        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 10; }
+        body { margin: 0; overflow: hidden; background: #555555; font-family: sans-serif; }
+        canvas { display: block; }
+        #loading { 
+            position: absolute; 
+            top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            color: white; 
+            font-size: 24px; 
+            pointer-events: none; 
+        }
     </style>
 </head>
 <body>
 
-<div id="start-screen">Click to Start (W,A,S,D to move, Click to swing)</div>
-<div id="ui-health"><div id="health-bar"></div></div>
-<div id="ui-coins">Coins: 0</div>
-<div id="crosshair"></div>
+<div id="loading">Loading Jeep Compass...</div>
 
 <script type="importmap">
     {
@@ -31,246 +32,87 @@
 
 <script type="module">
     import * as THREE from 'three';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    // --- Core Setup ---
+    // --- Scene Setup ---
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Sky blue
-    scene.fog = new THREE.Fog(0x87CEEB, 10, 50); // Adds depth
+    scene.background = new THREE.Color(0x555555); // Simple grey space
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.y = 1.6; // Set to typical human eye level
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 15);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true; // Enable shadows
     document.body.appendChild(renderer.domElement);
 
-    // Controls
-    const controls = new PointerLockControls(camera, document.body);
-    const startScreen = document.getElementById('start-screen');
-    startScreen.addEventListener('click', () => controls.lock());
-    controls.addEventListener('lock', () => startScreen.style.display = 'none');
-    controls.addEventListener('unlock', () => startScreen.style.display = 'flex');
+    // --- Controls ---
+    // OrbitControls handles all the mouse dragging, rotating, and zooming automatically
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; // Adds a smooth gliding effect when you let go
+    controls.dampingFactor = 0.05;
 
-    // Lights
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(10, 20, 10);
-    sun.castShadow = true;
-    scene.add(sun, new THREE.AmbientLight(0xffffff, 0.6));
+    // --- Lighting ---
+    // Good lighting is essential to see the details of the car
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
 
-    // --- Detailed Procedural Grass Ground ---
-    // We generate a texture canvas to create "detailed grass" without needing an image file
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#3b5e1a'; // Base dirt/green
-    ctx.fillRect(0, 0, 512, 512);
-    // Draw 5000 little grass blades/specks
-    for(let i = 0; i < 5000; i++) {
-        ctx.fillStyle = Math.random() > 0.5 ? '#4c8020' : '#2d4a13';
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 8);
-    }
-    const grassTex = new THREE.CanvasTexture(canvas);
-    grassTex.wrapS = THREE.RepeatWrapping;
-    grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.repeat.set(50, 50); // Repeat across the huge floor
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight1.position.set(10, 10, 10);
+    scene.add(dirLight1);
 
-    const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.8 })
+    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight2.position.set(-10, 10, -10);
+    scene.add(dirLight2);
+
+    // --- Load FBX Model ---
+    const loader = new FBXLoader();
+    loader.load(
+        './JEEP COMPASS 2021.FBX', 
+        (object) => {
+            // Hide loading text
+            document.getElementById('loading').style.display = 'none';
+
+            // Center and scale the model so it fits nicely on screen
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            // Re-center the model to (0,0,0)
+            object.position.x -= center.x;
+            object.position.y -= center.y;
+            object.position.z -= center.z;
+
+            // Scale it to a standard size (e.g., 10 units wide)
+            const maxDim = Math.max(size.x, size.y, size.z);
+            if (maxDim > 0) {
+                object.scale.multiplyScalar(10 / maxDim);
+            }
+
+            scene.add(object);
+        }, 
+        (xhr) => {
+            // Update loading text with progress
+            const percent = Math.round((xhr.loaded / xhr.total) * 100);
+            if (percent > 0) {
+                document.getElementById('loading').innerText = `Loading: ${percent}%`;
+            }
+        }, 
+        (error) => {
+            console.error('Error loading FBX:', error);
+            document.getElementById('loading').innerText = 'Error loading model. Check console.';
+        }
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
 
-    // --- Game State & Utility ---
-    let coins = 0;
-    const crates = [];
-    const bombs = [];
-    const items = [];
-    let isSwinging = false;
-    const loader = new GLTFLoader();
-
-    // Fixes Model Scaling & Grounding (Forces it to be a specific size and rest exactly on y=0)
-    function fitModel(model, targetSize, isHandHeld = false) {
-        const box = new THREE.Box3().setFromObject(model);
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = targetSize / maxDim;
-        model.scale.setScalar(scale);
-
-        if (!isHandHeld) {
-            // Force bottom of model to touch y=0
-            const newBox = new THREE.Box3().setFromObject(model);
-            model.position.y -= newBox.min.y; 
-        }
-        
-        // Enable shadows
-        model.traverse(child => {
-            if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
-        });
-        return model;
-    }
-
-    // --- Axe Setup ---
-    let axePivot = new THREE.Group();
-    // Position the pivot relative to the camera
-    axePivot.position.set(0.3, -0.3, -0.5); 
-    camera.add(axePivot);
-    scene.add(camera);
-
-    loader.load('./axe.glb', (gltf) => {
-        const axe = gltf.scene;
-        fitModel(axe, 0.5, true); // Force axe to be 0.5 units long
-        // Adjust the rotation so it looks like it's pointing forward
-        axe.rotation.y = Math.PI / 2; 
-        axe.rotation.x = Math.PI / 4;
-        axePivot.add(axe);
-    });
-
-    // --- Spawning Logic ---
-    function spawnCrate(x, z) {
-        loader.load('./crate.glb', (gltf) => {
-            const crate = gltf.scene;
-            fitModel(crate, 1.2); // Force crate to be 1.2 meters big
-            crate.position.set(x, crate.position.y, z);
-            crate.userData = { hp: 3, isCrate: true };
-            scene.add(crate);
-            crates.push(crate);
-        });
-    }
-    
-    // Spawn 2 crates in front of you
-    spawnCrate(-1, -4);
-    spawnCrate(1.5, -4);
-
-    function spawnReward(pos) {
-        const type = Math.random() > 0.5 ? 'coin' : 'bomb';
-        loader.load(`./${type}.glb`, (gltf) => {
-            const obj = gltf.scene;
-            fitModel(obj, type === 'coin' ? 0.4 : 0.6); // Scale coins to 0.4, bombs to 0.6
-            
-            // Start slightly above ground
-            obj.position.copy(pos);
-            obj.position.y += 0.5; 
-            
-            obj.userData = { type: type, createdAt: Date.now() };
-            if (type === 'bomb') {
-                obj.userData.timer = 5;
-                bombs.push(obj);
-            } else {
-                items.push(obj);
-            }
-            scene.add(obj);
-        });
-    }
-
-    // --- Combat Logic ---
-    window.addEventListener('mousedown', () => {
-        if (isSwinging || !controls.isLocked) return;
-        isSwinging = true;
-
-        // Swing Animation (Rotates the pivot)
-        const startRotation = axePivot.rotation.x;
-        axePivot.rotation.x -= 1.0; // Swing down
-        
-        // Raycast Check
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-        const hits = raycaster.intersectObjects(crates, true);
-
-        if (hits.length > 0 && hits[0].distance < 3.5) {
-            let target = hits[0].object;
-            // Climb up the group tree to find the root crate object
-            while(target.parent && !target.userData.isCrate && target.parent.type !== 'Scene') {
-                target = target.parent;
-            }
-            
-            if(target.userData.isCrate) {
-                target.userData.hp -= 1;
-                
-                // Shake effect
-                target.position.x += (Math.random() - 0.5) * 0.1;
-
-                if (target.userData.hp <= 0) {
-                    spawnReward(target.position.clone());
-                    scene.remove(target);
-                    crates.splice(crates.indexOf(target), 1);
-                }
-            }
-        }
-
-        // Return Axe smoothly
-        setTimeout(() => { 
-            isSwinging = false; 
-            axePivot.rotation.x = startRotation; 
-        }, 250);
-    });
-
-    // --- Movement Logic ---
-    const move = { f: 0, r: 0 };
-    window.addEventListener('keydown', (e) => {
-        if(e.code === 'KeyW') move.f = 0.15;
-        if(e.code === 'KeyS') move.f = -0.15;
-        if(e.code === 'KeyA') move.r = -0.15;
-        if(e.code === 'KeyD') move.r = 0.15;
-    });
-    window.addEventListener('keyup', (e) => {
-        if(['KeyW', 'KeyS'].includes(e.code)) move.f = 0;
-        if(['KeyA', 'KeyD'].includes(e.code)) move.r = 0;
-    });
-
-    // --- Main Loop ---
+    // --- Main Animation Loop ---
     function animate() {
         requestAnimationFrame(animate);
-
-        if (controls.isLocked) {
-            controls.moveForward(move.f);
-            controls.moveRight(move.r);
-            // Keep player exactly on ground level
-            camera.position.y = 1.6; 
-        }
-
-        const now = Date.now();
-        
-        // Update Bombs
-        bombs.forEach((bomb, i) => {
-            const age = (now - bomb.userData.createdAt) / 1000;
-            
-            // Bobbing effect
-            bomb.position.y = (Math.sin(now * 0.005) * 0.1) + 0.3;
-
-            if (age >= 5) {
-                // Explode visually (grow huge instantly)
-                bomb.scale.multiplyScalar(1.5);
-                setTimeout(() => { scene.remove(bomb); bombs.splice(i, 1); }, 100);
-            } else if (camera.position.distanceTo(bomb.position) < 2) {
-                // Push logic - slided away from player
-                const dir = new THREE.Vector3().subVectors(bomb.position, camera.position).normalize();
-                bomb.position.add(dir.multiplyScalar(0.08));
-            }
-        });
-
-        // Update Coins
-        items.forEach((coin, i) => {
-            coin.rotation.y += 0.03;
-            coin.position.y = (Math.sin(now * 0.005) * 0.2) + 0.5; // Hover
-            
-            if(camera.position.distanceTo(coin.position) < 1.5) {
-                coins++;
-                document.getElementById('ui-coins').innerText = `Coins: ${coins}`;
-                scene.remove(coin);
-                items.splice(i, 1);
-            }
-        });
-
+        controls.update(); // Required for OrbitControls damping
         renderer.render(scene, camera);
     }
     animate();
 
-    // Handle Window Resize
+    // --- Handle Window Resize ---
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
